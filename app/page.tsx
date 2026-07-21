@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Holding = {
   rank: number;
@@ -38,16 +38,16 @@ const managers = [
   { name: "Scion Asset", manager: "Michael Burry", cik: "0001649339", value: "$0.9B", holdings: 13, initials: "SA" },
 ];
 
-const sectors = [
-  { name: "金融", value: 35.3, color: "#34d399" },
-  { name: "信息技术", value: 22.0, color: "#60a5fa" },
-  { name: "日常消费", value: 15.9, color: "#fbbf24" },
-  { name: "能源", value: 13.2, color: "#fb7185" },
-  { name: "通信服务", value: 6.3, color: "#a78bfa" },
-  { name: "其他", value: 7.3, color: "#64748b" },
-];
-
 const quarters = ["2026 Q1", "2025 Q4", "2025 Q3", "2025 Q2", "2025 Q1"];
+
+type DataMeta = {
+  totalValue: number;
+  count: number;
+  filingDate: string;
+  reportDate: string;
+  sourceUrl: string;
+  removed: number;
+};
 
 export default function Home() {
   const [activeManager, setActiveManager] = useState(managers[0]);
@@ -56,11 +56,58 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Holding | null>(null);
   const [showSearch, setShowSearch] = useState(false);
+  const [activeHoldings, setActiveHoldings] = useState<Holding[]>(holdings);
+  const [dataMeta, setDataMeta] = useState<DataMeta | null>({ totalValue: 263.1, count: 26, filingDate: "2026-05-15", reportDate: "2026-03-31", sourceUrl: "https://www.sec.gov/Archives/edgar/data/1067983/000119312526226661/0001193125-26-226661-index.htm", removed: 0 });
+  const [loading, setLoading] = useState(false);
+  const [dataError, setDataError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setDataError("");
+    setSelected(null);
+    fetch(`/api/sec13f?cik=${activeManager.cik}&quarter=${encodeURIComponent(quarter)}`, { signal: controller.signal })
+      .then(async (response) => {
+        const data = await response.json() as { holdings?: Holding[]; meta?: DataMeta; error?: string };
+        if (!response.ok || !data.holdings || !data.meta) throw new Error(data.error ?? "SEC 数据暂时不可用");
+        setActiveHoldings(data.holdings);
+        setDataMeta(data.meta);
+      })
+      .catch((error) => {
+        if (error instanceof Error && error.name === "AbortError") return;
+        setDataError(error instanceof Error ? error.message : "SEC 数据暂时不可用");
+        setActiveHoldings(activeManager.cik === managers[0].cik && quarter === quarters[0] ? holdings : []);
+        if (activeManager.cik !== managers[0].cik || quarter !== quarters[0]) setDataMeta(null);
+      })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [activeManager, quarter]);
 
   const visibleHoldings = useMemo(() => {
-    if (filter === "全部") return holdings;
-    return holdings.filter((item) => item.action === filter);
-  }, [filter]);
+    if (filter === "全部") return activeHoldings;
+    return activeHoldings.filter((item) => item.action === filter);
+  }, [filter, activeHoldings]);
+
+  const sectorData = useMemo(() => {
+    const palette: Record<string, string> = { 金融: "#34d399", 信息技术: "#60a5fa", 日常消费: "#fbbf24", 能源: "#fb7185", 通信服务: "#a78bfa", 医疗保健: "#22d3ee", 可选消费: "#f97316", 工业: "#94a3b8", 其他: "#64748b" };
+    const grouped = new Map<string, number>();
+    activeHoldings.forEach((item) => grouped.set(item.sector, (grouped.get(item.sector) ?? 0) + item.weight));
+    return [...grouped.entries()].map(([name, value]) => ({ name, value, color: palette[name] ?? "#64748b" })).sort((a, b) => b.value - a.value);
+  }, [activeHoldings]);
+
+  const donutBackground = useMemo(() => {
+    let cursor = 0;
+    const parts = sectorData.map((item) => {
+      const start = cursor;
+      cursor += item.value;
+      return `${item.color} ${start.toFixed(1)}% ${Math.min(100, cursor).toFixed(1)}%`;
+    });
+    return parts.length ? `conic-gradient(${parts.join(",")})` : "#1b2833";
+  }, [sectorData]);
+
+  const topTen = activeHoldings.slice(0, 10).reduce((sum, item) => sum + item.weight, 0);
+  const turnover = activeHoldings.reduce((sum, item) => sum + item.weight * Math.min(100, Math.abs(item.change)) / 100, 0) / 2;
+  const filingDate = dataMeta?.filingDate ? dataMeta.filingDate.replaceAll("-", ".") : "—";
 
   const managerMatches = managers.filter((item) =>
     `${item.name}${item.manager}`.toLowerCase().includes(query.toLowerCase()),
@@ -68,6 +115,7 @@ export default function Home() {
 
   const chooseManager = (manager: (typeof managers)[number]) => {
     setActiveManager(manager);
+    setFilter("全部");
     setQuery("");
     setShowSearch(false);
   };
@@ -112,7 +160,7 @@ export default function Home() {
                 <button key={item.cik} onClick={() => chooseManager(item)}>
                   <span className="avatar small">{item.initials}</span>
                   <span><b>{item.name}</b><small>{item.manager}</small></span>
-                  <span className="result-value">{item.value}</span>
+                  <span className="result-value">SEC 实时</span>
                 </button>
               ))}
               {managerMatches.length === 0 && <p className="no-result">未找到匹配机构</p>}
@@ -140,32 +188,32 @@ export default function Home() {
             <select id="quarter" value={quarter} onChange={(event) => setQuarter(event.target.value)}>
               {quarters.map((item) => <option key={item}>{item}</option>)}
             </select>
-            <span className="filed-date">披露于 2026.05.15</span>
+            <span className="filed-date">披露于 {filingDate}</span>
           </div>
         </div>
 
         <div className="metric-grid">
           <article className="metric-card featured">
             <div className="metric-label">13F 持仓市值 <span>i</span></div>
-            <strong>{activeManager.value}</strong>
-            <div className="metric-foot"><span className="positive">↗ 4.8%</span><small>较上季度</small></div>
+            <strong>{dataMeta ? `$${dataMeta.totalValue.toFixed(1)}B` : "—"}</strong>
+            <div className="metric-foot"><span className={dataError ? "down" : "positive"}>{loading ? "正在同步" : dataError ? "使用备用数据" : "SEC 已同步"}</span><small>{quarter}</small></div>
             <div className="sparkline" aria-hidden="true"><span /><span /><span /><span /><span /><span /><span /></div>
           </article>
           <article className="metric-card">
             <div className="metric-label">持仓数量</div>
-            <strong>{activeManager.holdings}</strong>
-            <div className="metric-foot"><span className="neutral">— 2</span><small>较上季度</small></div>
+            <strong>{dataMeta?.count ?? "—"}</strong>
+            <div className="metric-foot"><span className="neutral">{dataMeta ? `清仓 ${dataMeta.removed}` : "—"}</span><small>较上季度</small></div>
           </article>
           <article className="metric-card">
             <div className="metric-label">前十集中度</div>
-            <strong>91.1%</strong>
-            <div className="progress"><span style={{ width: "91.1%" }} /></div>
+            <strong>{activeHoldings.length ? `${topTen.toFixed(1)}%` : "—"}</strong>
+            <div className="progress"><span style={{ width: `${Math.min(100, topTen)}%` }} /></div>
             <div className="metric-foot"><small>高度集中</small></div>
           </article>
           <article className="metric-card">
             <div className="metric-label">本季换手率</div>
-            <strong>8.4%</strong>
-            <div className="metric-foot"><span className="positive">低换手</span><small>长期持有风格</small></div>
+            <strong>{activeHoldings.length ? `${turnover.toFixed(1)}%` : "—"}</strong>
+            <div className="metric-foot"><span className="positive">估算值</span><small>按申报股数变化</small></div>
           </article>
         </div>
 
@@ -173,7 +221,7 @@ export default function Home() {
           <article className="panel top-holdings">
             <div className="panel-head"><div><span className="section-kicker">CONCENTRATION</span><h3>核心持仓</h3></div><span className="panel-note">占组合权重</span></div>
             <div className="bar-list">
-              {holdings.slice(0, 6).map((item) => (
+              {activeHoldings.slice(0, 6).map((item) => (
                 <button key={item.ticker} onClick={() => setSelected(item)} className="bar-row">
                   <span className="rank">{String(item.rank).padStart(2, "0")}</span>
                   <span className="stock-logo" style={{ background: item.color }}>{item.ticker.slice(0, 1)}</span>
@@ -188,12 +236,12 @@ export default function Home() {
           <article className="panel allocation">
             <div className="panel-head"><div><span className="section-kicker">ALLOCATION</span><h3>行业分布</h3></div></div>
             <div className="donut-wrap">
-              <div className="donut"><div><strong>6</strong><span>行业</span></div></div>
+              <div className="donut" style={{ background: donutBackground }}><div><strong>{sectorData.length}</strong><span>行业</span></div></div>
               <div className="legend">
-                {sectors.map((item) => <div key={item.name}><span><i style={{ background: item.color }} />{item.name}</span><b>{item.value}%</b></div>)}
+                {sectorData.slice(0, 6).map((item) => <div key={item.name}><span><i style={{ background: item.color }} />{item.name}</span><b>{item.value.toFixed(1)}%</b></div>)}
               </div>
             </div>
-            <div className="allocation-note"><span>组合特征</span><b>金融 + 消费占比超过一半</b></div>
+            <div className="allocation-note"><span>最大行业</span><b>{sectorData[0] ? `${sectorData[0].name} · ${sectorData[0].value.toFixed(1)}%` : "等待数据"}</b></div>
           </article>
         </div>
       </section>
@@ -214,8 +262,10 @@ export default function Home() {
               <span><i className={`action ${item.action}`}>{item.action}</i><b className={item.change > 0 ? "up" : item.change < 0 ? "down" : "flat"}>{item.change === 0 ? "—" : `${item.change > 0 ? "+" : ""}${item.change}%`}</b></span>
             </button>
           ))}
+          {loading && <div className="table-status"><span className="loader" />正在从 SEC EDGAR 同步申报数据…</div>}
+          {!loading && visibleHoldings.length === 0 && <div className="table-status">{dataError || "该筛选条件下暂无持仓"}</div>}
         </div>
-        <p className="data-caption">持仓市值与股数依据 SEC Form 13F 信息表汇总；季度变化将在数据服务接通后自动与上季申报对比。</p>
+        <p className="data-caption">数据直接读取 SEC Form 13F 信息表，并按 CUSIP 合并同一证券；季度变化按申报股数与上一季自动对比。13F 不包含现金、私募资产及多数海外直接持仓。</p>
       </section>
 
       <section className="managers-section" id="managers">
@@ -238,7 +288,7 @@ export default function Home() {
             <div className="drawer-stock"><span className="stock-logo large" style={{ background: selected.color }}>{selected.ticker[0]}</span><div><span className="section-kicker">POSITION DETAIL</span><h2>{selected.ticker}</h2><p>{selected.company} · {selected.sector}</p></div></div>
             <div className="drawer-metrics"><div><span>持仓市值</span><b>${selected.value.toFixed(2)}B</b></div><div><span>组合占比</span><b>{selected.weight.toFixed(2)}%</b></div><div><span>持股数量</span><b>{selected.shares}</b></div><div><span>本季动作</span><b className={selected.change >= 0 ? "up" : "down"}>{selected.action}</b></div></div>
             <div className="history-card"><div className="panel-head"><h3>持仓权重趋势</h3><span>近 5 季</span></div><div className="history-bars">{[62, 68, 84, 76, 71].map((height, index) => <div key={index}><i style={{ height: `${height}%` }} /><span>{quarters[4 - index].replace("20", "'")}</span></div>)}</div></div>
-            <div className="filing-link"><span>最新申报</span><div><b>Form 13F-HR · {quarter}</b><small>2026 年 5 月 15 日提交</small></div><a href="https://www.sec.gov/Archives/edgar/data/1067983/000119312526226661/0001193125-26-226661-index.htm" target="_blank" rel="noreferrer">查看原文 ↗</a></div>
+            <div className="filing-link"><span>最新申报</span><div><b>Form 13F-HR · {quarter}</b><small>{dataMeta?.filingDate ?? "—"} 提交</small></div>{dataMeta?.sourceUrl && <a href={dataMeta.sourceUrl} target="_blank" rel="noreferrer">查看原文 ↗</a>}</div>
           </aside>
         </div>
       )}
