@@ -50,6 +50,7 @@ type DataMeta = {
 };
 
 export default function Home() {
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [activeManager, setActiveManager] = useState(managers[0]);
   const [quarter, setQuarter] = useState(quarters[0]);
   const [filter, setFilter] = useState("全部");
@@ -60,6 +61,21 @@ export default function Home() {
   const [dataMeta, setDataMeta] = useState<DataMeta | null>({ totalValue: 263.1, count: 26, filingDate: "2026-05-15", reportDate: "2026-03-31", sourceUrl: "https://www.sec.gov/Archives/edgar/data/1067983/000119312526226661/0001193125-26-226661-index.htm", removed: 0 });
   const [loading, setLoading] = useState(false);
   const [dataError, setDataError] = useState("");
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem("13f-theme");
+    const preferred = window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    const nextTheme = saved === "light" || saved === "dark" ? saved : preferred;
+    setTheme(nextTheme);
+    document.documentElement.dataset.theme = nextTheme;
+  }, []);
+
+  const toggleTheme = () => {
+    const nextTheme = theme === "dark" ? "light" : "dark";
+    setTheme(nextTheme);
+    document.documentElement.dataset.theme = nextTheme;
+    window.localStorage.setItem("13f-theme", nextTheme);
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -134,6 +150,16 @@ export default function Home() {
         </nav>
         <div className="header-actions">
           <span className="source-badge"><i /> SEC EDGAR</span>
+          <button
+            className="theme-toggle"
+            type="button"
+            onClick={toggleTheme}
+            aria-label={theme === "dark" ? "切换到浅色模式" : "切换到深色模式"}
+            title={theme === "dark" ? "切换到浅色模式" : "切换到深色模式"}
+          >
+            <span className="theme-icon" aria-hidden="true">{theme === "dark" ? "☀" : "☾"}</span>
+            <span className="theme-label">{theme === "dark" ? "浅色" : "深色"}</span>
+          </button>
           <button className="icon-button" aria-label="打开搜索" onClick={() => setShowSearch(!showSearch)}>⌕</button>
         </div>
       </header>
