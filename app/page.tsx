@@ -31,11 +31,16 @@ const holdings: Holding[] = [
 ];
 
 const managers = [
-  { name: "伯克希尔·哈撒韦", manager: "Warren Buffett", cik: "0001067983", value: "$263.1B", holdings: 26, photo: "/investors/warren-buffett.jpg", photoPosition: "72% center" },
-  { name: "桥水基金", manager: "Ray Dalio", cik: "0001350694", value: "$21.8B", holdings: 745, photo: "/investors/ray-dalio.jpg", photoPosition: "43% 24%" },
-  { name: "潘兴广场", manager: "Bill Ackman", cik: "0001336528", value: "$14.6B", holdings: 11, photo: "/investors/bill-ackman.jpg", photoPosition: "center 24%" },
-  { name: "喜马拉雅资本", manager: "Li Lu", cik: "0001709323", value: "$3.1B", holdings: 8, photo: "/investors/li-lu.jpg", photoPosition: "center 18%" },
-  { name: "Scion Asset", manager: "Michael Burry", cik: "0001649339", value: "$0.9B", holdings: 13, photo: "/investors/michael-burry.jpg", photoPosition: "center 20%" },
+  { name: "伯克希尔·哈撒韦", manager: "Warren Buffett", cik: "0001067983", photo: "/investors/warren-buffett.jpg", photoPosition: "72% center" },
+  { name: "喜马拉雅资本", manager: "Li Lu", cik: "0001709323", photo: "/investors/li-lu.jpg", photoPosition: "center 18%" },
+  { name: "Fundsmith", manager: "Terry Smith", cik: "0001569205", photo: "/investors/terry-smith.jpg", photoPosition: "center 22%" },
+  { name: "Akre Capital", manager: "Chuck Akre", cik: "0001112520", photo: "/investors/chuck-akre.jpg", photoPosition: "center 20%" },
+  { name: "Duquesne Family Office", manager: "Stanley Druckenmiller", cik: "0001536411", photo: "/investors/stanley-druckenmiller.jpg", photoPosition: "center center" },
+  { name: "Appaloosa", manager: "David Tepper", cik: "0001656456", photo: "/investors/david-tepper.webp", photoPosition: "center 18%" },
+  { name: "潘兴广场", manager: "Bill Ackman", cik: "0001336528", photo: "/investors/bill-ackman.jpg", photoPosition: "center 24%" },
+  { name: "Viking Global", manager: "Andreas Halvorsen", cik: "0001103804", photo: "/investors/andreas-halvorsen.jpg", photoPosition: "center 18%" },
+  { name: "Tiger Global", manager: "Chase Coleman", cik: "0001167483", photo: "/investors/chase-coleman.jpg", photoPosition: "center 20%" },
+  { name: "TCI Fund Management", manager: "Chris Hohn", cik: "0001647251", photo: "/investors/chris-hohn.jpg", photoPosition: "62% center" },
 ];
 
 const quarters = ["2026 Q1", "2025 Q4", "2025 Q3", "2025 Q2", "2025 Q1"];
@@ -175,7 +180,7 @@ export default function Home() {
             value={query}
             onChange={(event) => { setQuery(event.target.value); setShowSearch(true); }}
             onFocus={() => setShowSearch(true)}
-            placeholder="搜索机构或投资人，例如 Buffett、桥水…"
+            placeholder="搜索机构或投资人，例如 Buffett、Fundsmith…"
             aria-label="搜索机构或投资人"
           />
           <kbd>⌘ K</kbd>
@@ -225,7 +230,6 @@ export default function Home() {
                 <b>{item.manager}</b>
                 <small>{item.name}</small>
               </span>
-              <span className="manager-stat"><b>{item.value}</b><small>{item.holdings} 项持仓</small></span>
             </button>
           ))}
         </div>
