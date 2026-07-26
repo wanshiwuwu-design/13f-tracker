@@ -13,8 +13,20 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://smart-money-13f-tracker.garfield-wu.chatgpt.site"),
   title: "13F Tracker｜机构持仓追踪",
   description: "追踪知名投资机构的 13F 持仓、季度变化与行业分布。",
+  openGraph: {
+    title: "13F Tracker｜机构持仓追踪",
+    description: "追踪顶级投资人的每一次下注。",
+    images: [{ url: "/og.png", width: 1200, height: 630 }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "13F Tracker｜机构持仓追踪",
+    description: "追踪顶级投资人的每一次下注。",
+    images: ["/og.png"],
+  },
   other: {
     "codex-preview": "development",
   },

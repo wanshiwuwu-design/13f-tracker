@@ -30,12 +30,47 @@ const holdings: Holding[] = [
   { rank: 12, ticker: "KR", company: "Kroger", sector: "日常消费", value: 3.62, weight: 1.38, shares: "50.0M", change: -3.4, action: "减持", color: "#1d4ed8" },
 ];
 
+type Manager = {
+  name: string;
+  manager: string;
+  cik: string;
+  value: string;
+  holdings: number;
+  image: string;
+};
+
+const baseManagers: Manager[] = [
+  { name: "伯克希尔·哈撒韦", manager: "Warren Buffett", cik: "0001067983", value: "$263.1B", holdings: 26, image: "/investors/warren-buffett.jpg" },
+  { name: "桥水基金", manager: "Ray Dalio", cik: "0001350694", value: "$21.8B", holdings: 745, image: "/investors/ray-dalio.jpg" },
+  { name: "潘兴广场", manager: "Bill Ackman", cik: "0001336528", value: "$14.6B", holdings: 11, image: "/investors/bill-ackman.jpg" },
+  { name: "喜马拉雅资本", manager: "Li Lu", cik: "0001709323", value: "$3.1B", holdings: 8, image: "/investors/li-lu.jpg" },
+  { name: "Scion Asset", manager: "Michael Burry", cik: "0001649339", value: "$0.9B", holdings: 13, image: "/investors/michael-burry.jpg" },
+  { name: "H&H 国际投资", manager: "段永平", cik: "0001759760", value: "SEC 实时", holdings: 0, image: "/investors/duan-yongping.jpg" },
+  { name: "ARK Invest", manager: "木头姐 · Cathie Wood", cik: "0001697748", value: "SEC 实时", holdings: 0, image: "/investors/cathie-wood.jpg" },
+];
+
+const requestedManagers: Manager[] = [
+  { name: "伯克希尔·哈撒韦", manager: "Warren Buffett", cik: "0001067983", value: "$263.1B", holdings: 26, image: "/investors/warren-buffett.jpg" },
+  { name: "喜马拉雅资本", manager: "Li Lu", cik: "0001709323", value: "$3.1B", holdings: 8, image: "/investors/li-lu.jpg" },
+  { name: "Fundsmith", manager: "Terry Smith", cik: "0001569205", value: "SEC 实时", holdings: 0, image: "/investors/terry-smith.png" },
+  { name: "Akre Capital", manager: "Chuck Akre", cik: "0001112520", value: "SEC 实时", holdings: 0, image: "/investors/chuck-akre.jpg" },
+  { name: "Duquesne Family Office", manager: "Stanley Druckenmiller", cik: "0001536411", value: "SEC 实时", holdings: 0, image: "/investors/stanley-druckenmiller.jpg" },
+  { name: "Appaloosa", manager: "David Tepper", cik: "0001656456", value: "SEC 实时", holdings: 0, image: "/investors/david-tepper.jpg" },
+  { name: "潘兴广场", manager: "Bill Ackman", cik: "0001336528", value: "$14.6B", holdings: 11, image: "/investors/bill-ackman.jpg" },
+  { name: "Viking Global", manager: "Andreas Halvorsen", cik: "0001103804", value: "SEC 实时", holdings: 0, image: "/investors/andreas-halvorsen.jpg" },
+  { name: "Tiger Global", manager: "Chase Coleman", cik: "0001167483", value: "SEC 实时", holdings: 0, image: "/investors/chase-coleman.jpg" },
+  { name: "TCI Fund Management", manager: "Chris Hohn", cik: "0001647251", value: "SEC 实时", holdings: 0, image: "/investors/chris-hohn.jpg" },
+];
+
 const managers = [
-  { name: "伯克希尔·哈撒韦", manager: "Warren Buffett", cik: "0001067983", value: "$263.1B", holdings: 26, initials: "BH" },
-  { name: "桥水基金", manager: "Ray Dalio", cik: "0001350694", value: "$21.8B", holdings: 745, initials: "BW" },
-  { name: "潘兴广场", manager: "Bill Ackman", cik: "0001336528", value: "$14.6B", holdings: 11, initials: "PS" },
-  { name: "喜马拉雅资本", manager: "Li Lu", cik: "0001709323", value: "$3.1B", holdings: 8, initials: "HC" },
-  { name: "Scion Asset", manager: "Michael Burry", cik: "0001649339", value: "$0.9B", holdings: 13, initials: "SA" },
+  ...baseManagers,
+  ...requestedManagers.filter((candidate) =>
+    !baseManagers.some((existing) =>
+      existing.cik === candidate.cik
+      || existing.manager.toLowerCase() === candidate.manager.toLowerCase()
+      || existing.name.toLowerCase() === candidate.name.toLowerCase(),
+    ),
+  ),
 ];
 
 const quarters = ["2026 Q1", "2025 Q4", "2025 Q3", "2025 Q2", "2025 Q1"];
@@ -54,9 +89,7 @@ export default function Home() {
   const [activeManager, setActiveManager] = useState(managers[0]);
   const [quarter, setQuarter] = useState(quarters[0]);
   const [filter, setFilter] = useState("全部");
-  const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Holding | null>(null);
-  const [showSearch, setShowSearch] = useState(false);
   const [activeHoldings, setActiveHoldings] = useState<Holding[]>(holdings);
   const [dataMeta, setDataMeta] = useState<DataMeta | null>({ totalValue: 263.1, count: 26, filingDate: "2026-05-15", reportDate: "2026-03-31", sourceUrl: "https://www.sec.gov/Archives/edgar/data/1067983/000119312526226661/0001193125-26-226661-index.htm", removed: 0 });
   const [loading, setLoading] = useState(false);
@@ -125,19 +158,13 @@ export default function Home() {
   const turnover = activeHoldings.reduce((sum, item) => sum + item.weight * Math.min(100, Math.abs(item.change)) / 100, 0) / 2;
   const filingDate = dataMeta?.filingDate ? dataMeta.filingDate.replaceAll("-", ".") : "—";
 
-  const managerMatches = managers.filter((item) =>
-    `${item.name}${item.manager}`.toLowerCase().includes(query.toLowerCase()),
-  );
-
   const chooseManager = (manager: (typeof managers)[number]) => {
     setActiveManager(manager);
     setFilter("全部");
-    setQuery("");
-    setShowSearch(false);
   };
 
   return (
-    <main className="app-shell">
+    <main className="app-shell" id="top">
       <header className="topbar">
         <a className="brand" href="#top" aria-label="13F Tracker 首页">
           <span className="brand-mark"><i /><i /><i /></span>
@@ -160,49 +187,24 @@ export default function Home() {
             <span className="theme-icon" aria-hidden="true">{theme === "dark" ? "☀" : "☾"}</span>
             <span className="theme-label">{theme === "dark" ? "浅色" : "深色"}</span>
           </button>
-          <button className="icon-button" aria-label="打开搜索" onClick={() => setShowSearch(!showSearch)}>⌕</button>
         </div>
       </header>
 
-      <section className="hero" id="top">
-        <div className="hero-glow" />
-        <div className="eyebrow"><span /> SMART MONEY, MADE VISIBLE</div>
-        <h1>看懂顶级机构的<br /><em>每一次下注</em></h1>
-        <p>追踪全球知名投资机构的 13F 持仓变化，从公开披露中识别长期资本的真实选择。</p>
-        <div className="search-wrap">
-          <span className="search-icon">⌕</span>
-          <input
-            value={query}
-            onChange={(event) => { setQuery(event.target.value); setShowSearch(true); }}
-            onFocus={() => setShowSearch(true)}
-            placeholder="搜索机构或投资人，例如 Buffett、桥水…"
-            aria-label="搜索机构或投资人"
-          />
-          <kbd>⌘ K</kbd>
-          {showSearch && (
-            <div className="search-results">
-              <div className="search-label">机构与投资人</div>
-              {managerMatches.map((item) => (
-                <button key={item.cik} onClick={() => chooseManager(item)}>
-                  <span className="avatar small">{item.initials}</span>
-                  <span><b>{item.name}</b><small>{item.manager}</small></span>
-                  <span className="result-value">SEC 实时</span>
-                </button>
-              ))}
-              {managerMatches.length === 0 && <p className="no-result">未找到匹配机构</p>}
-            </div>
-          )}
-        </div>
-        <div className="quick-list">
-          <span>热门：</span>
-          {managers.slice(0, 4).map((item) => <button key={item.cik} onClick={() => chooseManager(item)}>{item.manager}</button>)}
+      <section className="managers-section" id="managers">
+        <div className="section-heading compact"><div><span className="section-kicker">FOLLOW THE BEST</span><h2>追踪顶级投资人</h2></div></div>
+        <div className="manager-grid">
+          {managers.map((item) => (
+            <button className={activeManager.cik === item.cik ? "manager-card active" : "manager-card"} key={item.cik} onClick={() => chooseManager(item)}>
+              <img className="avatar" src={item.image} alt="" /><span><b>{item.name}</b><small>{item.manager}</small></span><span className="manager-stat"><b>{item.value}</b><small>{item.holdings} 项持仓</small></span>
+            </button>
+          ))}
         </div>
       </section>
 
       <section className="dashboard" id="dashboard">
         <div className="section-heading">
           <div className="manager-title">
-            <span className="avatar">{activeManager.initials}</span>
+            <img className="avatar active-manager-avatar" src={activeManager.image} alt={`${activeManager.manager} 头像`} />
             <div>
               <div className="section-kicker">CURRENT PORTFOLIO</div>
               <h2>{activeManager.name}</h2>
@@ -292,17 +294,6 @@ export default function Home() {
           {!loading && visibleHoldings.length === 0 && <div className="table-status">{dataError || "该筛选条件下暂无持仓"}</div>}
         </div>
         <p className="data-caption">数据直接读取 SEC Form 13F 信息表，并按 CUSIP 合并同一证券；季度变化按申报股数与上一季自动对比。13F 不包含现金、私募资产及多数海外直接持仓。</p>
-      </section>
-
-      <section className="managers-section" id="managers">
-        <div className="section-heading compact"><div><span className="section-kicker">FOLLOW THE BEST</span><h2>追踪更多顶级投资人</h2></div><button className="text-button">查看全部机构 →</button></div>
-        <div className="manager-grid">
-          {managers.map((item) => (
-            <button className={activeManager.cik === item.cik ? "manager-card active" : "manager-card"} key={item.cik} onClick={() => chooseManager(item)}>
-              <span className="avatar">{item.initials}</span><span><b>{item.name}</b><small>{item.manager}</small></span><span className="manager-stat"><b>{item.value}</b><small>{item.holdings} 项持仓</small></span>
-            </button>
-          ))}
-        </div>
       </section>
 
       <footer><div className="brand"><span className="brand-mark"><i /><i /><i /></span><span>13F <b>TRACKER</b></span></div><p>数据源自美国证券交易委员会公开披露，仅供研究，不构成投资建议。</p><a href="https://www.sec.gov/edgar/search/" target="_blank" rel="noreferrer">SEC EDGAR ↗</a></footer>
