@@ -32,4 +32,4 @@ npm run build
 
 ## 在线预览
 
-https://smart-money-13f.garfield-wu.chatgpt.site
+https://smart-money-13f-tracker.garfield-wu.chatgpt.site
