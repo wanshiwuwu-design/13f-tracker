@@ -43,6 +43,11 @@ const sectorByTicker: Record<string, string> = {
 
 const colors = ["#35e6a3", "#60a5fa", "#fbbf24", "#fb7185", "#a78bfa", "#22d3ee", "#f97316", "#94a3b8"];
 
+// Duquesne's information table still reports column 4 in thousands of dollars.
+const valueScaleByCik: Record<string, number> = {
+  "1536411": 1_000,
+};
+
 function decode(value: string) {
   return value
     .replace(/&amp;/g, "&")
@@ -92,6 +97,7 @@ async function filingsFor(cik: string): Promise<Filing[]> {
 
 async function loadHoldings(cik: string, filing: Filing) {
   const cikNumber = String(Number(cik));
+  const valueScale = valueScaleByCik[cikNumber] ?? 1;
   const accession = filing.accession.replace(/-/g, "");
   const base = `https://www.sec.gov/Archives/edgar/data/${cikNumber}/${accession}`;
   const index = await fetchJson(`${base}/index.json`);
@@ -106,7 +112,7 @@ async function loadHoldings(cik: string, filing: Filing) {
   for (const block of blocks) {
     const cusip = tag(block, "cusip");
     const current = aggregated.get(cusip) ?? { company: tag(block, "nameOfIssuer"), title: tag(block, "titleOfClass"), cusip, value: 0, shares: 0 };
-    current.value += Number(tag(block, "value").replace(/,/g, "")) || 0;
+    current.value += (Number(tag(block, "value").replace(/,/g, "")) || 0) * valueScale;
     current.shares += Number(tag(block, "sshPrnamt").replace(/,/g, "")) || 0;
     aggregated.set(cusip, current);
   }

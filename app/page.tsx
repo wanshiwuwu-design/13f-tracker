@@ -31,11 +31,16 @@ const holdings: Holding[] = [
 ];
 
 const managers = [
-  { name: "伯克希尔·哈撒韦", manager: "Warren Buffett", cik: "0001067983", value: "$263.1B", holdings: 26, initials: "BH" },
-  { name: "桥水基金", manager: "Ray Dalio", cik: "0001350694", value: "$21.8B", holdings: 745, initials: "BW" },
-  { name: "潘兴广场", manager: "Bill Ackman", cik: "0001336528", value: "$14.6B", holdings: 11, initials: "PS" },
-  { name: "喜马拉雅资本", manager: "Li Lu", cik: "0001709323", value: "$3.1B", holdings: 8, initials: "HC" },
-  { name: "Scion Asset", manager: "Michael Burry", cik: "0001649339", value: "$0.9B", holdings: 13, initials: "SA" },
+  { name: "伯克希尔·哈撒韦", manager: "Warren Buffett", cik: "0001067983", photo: "/investors/warren-buffett.jpg", photoPosition: "72% center" },
+  { name: "喜马拉雅资本", manager: "Li Lu", cik: "0001709323", photo: "/investors/li-lu.jpg", photoPosition: "center 18%" },
+  { name: "Fundsmith", manager: "Terry Smith", cik: "0001569205", photo: "/investors/terry-smith.jpg", photoPosition: "center 22%" },
+  { name: "Akre Capital", manager: "Chuck Akre", cik: "0001112520", photo: "/investors/chuck-akre.jpg", photoPosition: "center 20%" },
+  { name: "Duquesne Family Office", manager: "Stanley Druckenmiller", cik: "0001536411", photo: "/investors/stanley-druckenmiller.jpg", photoPosition: "center center" },
+  { name: "Appaloosa", manager: "David Tepper", cik: "0001656456", photo: "/investors/david-tepper.webp", photoPosition: "center 18%" },
+  { name: "潘兴广场", manager: "Bill Ackman", cik: "0001336528", photo: "/investors/bill-ackman.jpg", photoPosition: "center 24%" },
+  { name: "Viking Global", manager: "Andreas Halvorsen", cik: "0001103804", photo: "/investors/andreas-halvorsen.jpg", photoPosition: "center 18%" },
+  { name: "Tiger Global", manager: "Chase Coleman", cik: "0001167483", photo: "/investors/chase-coleman.jpg", photoPosition: "center 20%" },
+  { name: "TCI Fund Management", manager: "Chris Hohn", cik: "0001647251", photo: "/investors/chris-hohn.jpg", photoPosition: "62% center" },
 ];
 
 const quarters = ["2026 Q1", "2025 Q4", "2025 Q3", "2025 Q2", "2025 Q1"];
@@ -175,7 +180,7 @@ export default function Home() {
             value={query}
             onChange={(event) => { setQuery(event.target.value); setShowSearch(true); }}
             onFocus={() => setShowSearch(true)}
-            placeholder="搜索机构或投资人，例如 Buffett、桥水…"
+            placeholder="搜索机构或投资人，例如 Buffett、Fundsmith…"
             aria-label="搜索机构或投资人"
           />
           <kbd>⌘ K</kbd>
@@ -184,7 +189,7 @@ export default function Home() {
               <div className="search-label">机构与投资人</div>
               {managerMatches.map((item) => (
                 <button key={item.cik} onClick={() => chooseManager(item)}>
-                  <span className="avatar small">{item.initials}</span>
+                  <span className="avatar small manager-photo"><img src={item.photo} alt="" style={{ objectPosition: item.photoPosition }} /></span>
                   <span><b>{item.name}</b><small>{item.manager}</small></span>
                   <span className="result-value">SEC 实时</span>
                 </button>
@@ -199,10 +204,41 @@ export default function Home() {
         </div>
       </section>
 
+      <section className="managers-section" id="managers" aria-labelledby="managers-title">
+        <div className="manager-intro">
+          <div>
+            <span className="section-kicker">FOLLOW THE BEST</span>
+            <h2 id="managers-title">选择投资人</h2>
+            <p>点击头像，快速切换机构持仓</p>
+          </div>
+          <span className="manager-count">{managers.length} 位顶级投资人</span>
+        </div>
+        <div className="manager-grid" aria-label="投资人列表">
+          {managers.map((item) => (
+            <button
+              className={activeManager.cik === item.cik ? "manager-card active" : "manager-card"}
+              key={item.cik}
+              onClick={() => chooseManager(item)}
+              aria-pressed={activeManager.cik === item.cik}
+              aria-label={`查看 ${item.manager} 的持仓`}
+            >
+              <span className="manager-portrait">
+                <img src={item.photo} alt="" style={{ objectPosition: item.photoPosition }} />
+                <i className="selection-check" aria-hidden="true">✓</i>
+              </span>
+              <span className="manager-card-copy">
+                <b>{item.manager}</b>
+                <small>{item.name}</small>
+              </span>
+            </button>
+          ))}
+        </div>
+      </section>
+
       <section className="dashboard" id="dashboard">
         <div className="section-heading">
           <div className="manager-title">
-            <span className="avatar">{activeManager.initials}</span>
+            <span className="avatar manager-photo"><img src={activeManager.photo} alt="" style={{ objectPosition: activeManager.photoPosition }} /></span>
             <div>
               <div className="section-kicker">CURRENT PORTFOLIO</div>
               <h2>{activeManager.name}</h2>
@@ -292,17 +328,6 @@ export default function Home() {
           {!loading && visibleHoldings.length === 0 && <div className="table-status">{dataError || "该筛选条件下暂无持仓"}</div>}
         </div>
         <p className="data-caption">数据直接读取 SEC Form 13F 信息表，并按 CUSIP 合并同一证券；季度变化按申报股数与上一季自动对比。13F 不包含现金、私募资产及多数海外直接持仓。</p>
-      </section>
-
-      <section className="managers-section" id="managers">
-        <div className="section-heading compact"><div><span className="section-kicker">FOLLOW THE BEST</span><h2>追踪更多顶级投资人</h2></div><button className="text-button">查看全部机构 →</button></div>
-        <div className="manager-grid">
-          {managers.map((item) => (
-            <button className={activeManager.cik === item.cik ? "manager-card active" : "manager-card"} key={item.cik} onClick={() => chooseManager(item)}>
-              <span className="avatar">{item.initials}</span><span><b>{item.name}</b><small>{item.manager}</small></span><span className="manager-stat"><b>{item.value}</b><small>{item.holdings} 项持仓</small></span>
-            </button>
-          ))}
-        </div>
       </section>
 
       <footer><div className="brand"><span className="brand-mark"><i /><i /><i /></span><span>13F <b>TRACKER</b></span></div><p>数据源自美国证券交易委员会公开披露，仅供研究，不构成投资建议。</p><a href="https://www.sec.gov/edgar/search/" target="_blank" rel="noreferrer">SEC EDGAR ↗</a></footer>
