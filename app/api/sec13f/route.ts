@@ -87,7 +87,19 @@ async function filingsFor(cik: string): Promise<Filing[]> {
     accession: recent.accessionNumber[index],
     reportDate: recent.reportDate[index],
     filingDate: recent.filingDate[index],
-  }] : []);
+  }] : []).sort((a, b) => b.reportDate.localeCompare(a.reportDate));
+}
+
+function quarterFromReportDate(reportDate: string) {
+  const match = reportDate.match(/^(\d{4})-(03-31|06-30|09-30|12-31)$/);
+  if (!match) return reportDate;
+  const quarterByEnd: Record<string, string> = {
+    "03-31": "Q1",
+    "06-30": "Q2",
+    "09-30": "Q3",
+    "12-31": "Q4",
+  };
+  return `${match[1]} ${quarterByEnd[match[2]]}`;
 }
 
 async function loadHoldings(cik: string, filing: Filing) {
@@ -123,11 +135,14 @@ function compactShares(value: number) {
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const cik = (searchParams.get("cik") ?? "").replace(/\D/g, "");
-  const quarter = searchParams.get("quarter") ?? "2026 Q1";
-  if (!cik || !quarterEnd(quarter)) return Response.json({ error: "Invalid CIK or quarter" }, { status: 400 });
+  const requestedQuarter = searchParams.get("quarter");
+  if (!cik || (requestedQuarter && !quarterEnd(requestedQuarter))) return Response.json({ error: "Invalid CIK or quarter" }, { status: 400 });
 
   try {
     const filings = await filingsFor(cik);
+    const availableQuarters = [...new Set(filings.map((item) => quarterFromReportDate(item.reportDate)))];
+    const quarter = requestedQuarter ?? availableQuarters[0];
+    if (!quarter) return Response.json({ error: "No 13F-HR filings found" }, { status: 404 });
     const currentFiling = filings.find((item) => item.reportDate === quarterEnd(quarter));
     if (!currentFiling) return Response.json({ error: `No 13F-HR filing for ${quarter}` }, { status: 404 });
     const previousFiling = filings.find((item) => item.reportDate === quarterEnd(previousQuarter(quarter)));
@@ -157,7 +172,9 @@ export async function GET(request: Request) {
     const removed = previous?.holdings.filter((item) => !current.holdings.some((now) => now.cusip === item.cusip)).length ?? 0;
     return Response.json({
       holdings,
+      availableQuarters,
       meta: {
+        quarter,
         totalValue: total / 1e9,
         count: holdings.length,
         filingDate: currentFiling.filingDate,
@@ -165,7 +182,7 @@ export async function GET(request: Request) {
         sourceUrl: current.sourceUrl,
         removed,
       },
-    }, { headers: { "Cache-Control": "public, max-age=3600, s-maxage=21600" } });
+    }, { headers: { "Cache-Control": "public, max-age=900, s-maxage=3600, stale-while-revalidate=86400" } });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "SEC data unavailable" }, { status: 502 });
   }

@@ -15,21 +15,6 @@ type Holding = {
   color: string;
 };
 
-const holdings: Holding[] = [
-  { rank: 1, ticker: "AAPL", company: "Apple Inc.", sector: "信息技术", value: 57.84, weight: 21.98, shares: "228.1M", change: -6.2, action: "减持", color: "#9ca3af" },
-  { rank: 2, ticker: "AXP", company: "American Express", sector: "金融", value: 45.86, weight: 17.43, shares: "151.6M", change: 0, action: "持有", color: "#3b82f6" },
-  { rank: 3, ticker: "KO", company: "Coca-Cola", sector: "日常消费", value: 30.42, weight: 11.56, shares: "400.0M", change: 0, action: "持有", color: "#ef4444" },
-  { rank: 4, ticker: "BAC", company: "Bank of America", sector: "金融", value: 25.04, weight: 9.51, shares: "513.7M", change: -4.8, action: "减持", color: "#dc2626" },
-  { rank: 5, ticker: "CVX", company: "Chevron", sector: "能源", value: 17.46, weight: 6.63, shares: "84.4M", change: 2.3, action: "增持", color: "#2563eb" },
-  { rank: 6, ticker: "OXY", company: "Occidental Petroleum", sector: "能源", value: 17.22, weight: 6.54, shares: "264.9M", change: 0, action: "持有", color: "#111827" },
-  { rank: 7, ticker: "GOOGL", company: "Alphabet", sector: "通信服务", value: 16.63, weight: 6.32, shares: "57.8M", change: 18.4, action: "增持", color: "#f59e0b" },
-  { rank: 8, ticker: "CB", company: "Chubb", sector: "金融", value: 11.16, weight: 4.24, shares: "34.2M", change: 0, action: "持有", color: "#16a34a" },
-  { rank: 9, ticker: "MCO", company: "Moody's", sector: "金融", value: 10.76, weight: 4.09, shares: "24.7M", change: 0, action: "持有", color: "#0f766e" },
-  { rank: 10, ticker: "KHC", company: "Kraft Heinz", sector: "日常消费", value: 7.32, weight: 2.78, shares: "325.6M", change: -9.1, action: "减持", color: "#f97316" },
-  { rank: 11, ticker: "DVA", company: "DaVita", sector: "医疗保健", value: 4.63, weight: 1.76, shares: "30.1M", change: 1.1, action: "增持", color: "#8b5cf6" },
-  { rank: 12, ticker: "KR", company: "Kroger", sector: "日常消费", value: 3.62, weight: 1.38, shares: "50.0M", change: -3.4, action: "减持", color: "#1d4ed8" },
-];
-
 type Manager = {
   name: string;
   manager: string;
@@ -73,9 +58,8 @@ const managers = [
   ),
 ];
 
-const quarters = ["2026 Q1", "2025 Q4", "2025 Q3", "2025 Q2", "2025 Q1"];
-
 type DataMeta = {
+  quarter: string;
   totalValue: number;
   count: number;
   filingDate: string;
@@ -87,12 +71,13 @@ type DataMeta = {
 export default function Home() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [activeManager, setActiveManager] = useState(managers[0]);
-  const [quarter, setQuarter] = useState(quarters[0]);
+  const [quarter, setQuarter] = useState("");
+  const [availableQuarters, setAvailableQuarters] = useState<string[]>([]);
   const [filter, setFilter] = useState("全部");
   const [selected, setSelected] = useState<Holding | null>(null);
-  const [activeHoldings, setActiveHoldings] = useState<Holding[]>(holdings);
-  const [dataMeta, setDataMeta] = useState<DataMeta | null>({ totalValue: 263.1, count: 26, filingDate: "2026-05-15", reportDate: "2026-03-31", sourceUrl: "https://www.sec.gov/Archives/edgar/data/1067983/000119312526226661/0001193125-26-226661-index.htm", removed: 0 });
-  const [loading, setLoading] = useState(false);
+  const [activeHoldings, setActiveHoldings] = useState<Holding[]>([]);
+  const [dataMeta, setDataMeta] = useState<DataMeta | null>(null);
+  const [loading, setLoading] = useState(true);
   const [dataError, setDataError] = useState("");
 
   useEffect(() => {
@@ -115,18 +100,23 @@ export default function Home() {
     setLoading(true);
     setDataError("");
     setSelected(null);
-    fetch(`/api/sec13f?cik=${activeManager.cik}&quarter=${encodeURIComponent(quarter)}`, { signal: controller.signal })
+    setActiveHoldings([]);
+    setDataMeta(null);
+    const quarterQuery = quarter ? `&quarter=${encodeURIComponent(quarter)}` : "";
+    fetch(`/api/sec13f?cik=${activeManager.cik}${quarterQuery}`, { signal: controller.signal })
       .then(async (response) => {
-        const data = await response.json() as { holdings?: Holding[]; meta?: DataMeta; error?: string };
+        const data = await response.json() as { holdings?: Holding[]; meta?: DataMeta; availableQuarters?: string[]; error?: string };
         if (!response.ok || !data.holdings || !data.meta) throw new Error(data.error ?? "SEC 数据暂时不可用");
         setActiveHoldings(data.holdings);
         setDataMeta(data.meta);
+        setAvailableQuarters(data.availableQuarters ?? [data.meta.quarter]);
       })
       .catch((error) => {
         if (error instanceof Error && error.name === "AbortError") return;
         setDataError(error instanceof Error ? error.message : "SEC 数据暂时不可用");
-        setActiveHoldings(activeManager.cik === managers[0].cik && quarter === quarters[0] ? holdings : []);
-        if (activeManager.cik !== managers[0].cik || quarter !== quarters[0]) setDataMeta(null);
+        setActiveHoldings([]);
+        setDataMeta(null);
+        setAvailableQuarters([]);
       })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
@@ -160,6 +150,8 @@ export default function Home() {
 
   const chooseManager = (manager: (typeof managers)[number]) => {
     setActiveManager(manager);
+    setQuarter("");
+    setAvailableQuarters([]);
     setFilter("全部");
   };
 
@@ -195,7 +187,7 @@ export default function Home() {
         <div className="manager-grid">
           {managers.map((item) => (
             <button className={activeManager.cik === item.cik ? "manager-card active" : "manager-card"} key={item.cik} onClick={() => chooseManager(item)}>
-              <img className="avatar" src={item.image} alt="" /><span><b>{item.name}</b><small>{item.manager}</small></span><span className="manager-stat"><b>{item.value}</b><small>{item.holdings} 项持仓</small></span>
+              <img className="avatar" src={item.image} alt="" /><span><b>{item.name}</b><small>{item.manager}</small></span><span className="manager-stat"><b>自动更新</b><small>CIK {item.cik}</small></span>
             </button>
           ))}
         </div>
@@ -213,8 +205,9 @@ export default function Home() {
           </div>
           <div className="period-control">
             <label htmlFor="quarter">报告期</label>
-            <select id="quarter" value={quarter} onChange={(event) => setQuarter(event.target.value)}>
-              {quarters.map((item) => <option key={item}>{item}</option>)}
+            <select id="quarter" value={quarter || dataMeta?.quarter || ""} onChange={(event) => setQuarter(event.target.value)} disabled={!availableQuarters.length}>
+              {!availableQuarters.length && <option value="">读取最新披露…</option>}
+              {availableQuarters.map((item) => <option key={item}>{item}</option>)}
             </select>
             <span className="filed-date">披露于 {filingDate}</span>
           </div>
@@ -224,7 +217,7 @@ export default function Home() {
           <article className="metric-card featured">
             <div className="metric-label">13F 持仓市值 <span>i</span></div>
             <strong>{dataMeta ? `$${dataMeta.totalValue.toFixed(1)}B` : "—"}</strong>
-            <div className="metric-foot"><span className={dataError ? "down" : "positive"}>{loading ? "正在同步" : dataError ? "使用备用数据" : "SEC 已同步"}</span><small>{quarter}</small></div>
+            <div className="metric-foot"><span className={dataError ? "down" : "positive"}>{loading ? "正在同步" : dataError ? "同步失败" : "SEC 已同步"}</span><small>{dataMeta?.quarter ?? "最新披露"}</small></div>
             <div className="sparkline" aria-hidden="true"><span /><span /><span /><span /><span /><span /><span /></div>
           </article>
           <article className="metric-card">
@@ -304,8 +297,8 @@ export default function Home() {
             <button className="drawer-close" onClick={() => setSelected(null)} aria-label="关闭详情">×</button>
             <div className="drawer-stock"><span className="stock-logo large" style={{ background: selected.color }}>{selected.ticker[0]}</span><div><span className="section-kicker">POSITION DETAIL</span><h2>{selected.ticker}</h2><p>{selected.company} · {selected.sector}</p></div></div>
             <div className="drawer-metrics"><div><span>持仓市值</span><b>${selected.value.toFixed(2)}B</b></div><div><span>组合占比</span><b>{selected.weight.toFixed(2)}%</b></div><div><span>持股数量</span><b>{selected.shares}</b></div><div><span>本季动作</span><b className={selected.change >= 0 ? "up" : "down"}>{selected.action}</b></div></div>
-            <div className="history-card"><div className="panel-head"><h3>持仓权重趋势</h3><span>近 5 季</span></div><div className="history-bars">{[62, 68, 84, 76, 71].map((height, index) => <div key={index}><i style={{ height: `${height}%` }} /><span>{quarters[4 - index].replace("20", "'")}</span></div>)}</div></div>
-            <div className="filing-link"><span>最新申报</span><div><b>Form 13F-HR · {quarter}</b><small>{dataMeta?.filingDate ?? "—"} 提交</small></div>{dataMeta?.sourceUrl && <a href={dataMeta.sourceUrl} target="_blank" rel="noreferrer">查看原文 ↗</a>}</div>
+            <div className="history-card"><div className="panel-head"><h3>已收录报告期</h3><span>SEC 自动读取</span></div><p>{availableQuarters.slice(0, 5).join(" · ")}</p></div>
+            <div className="filing-link"><span>最新申报</span><div><b>Form 13F-HR · {dataMeta?.quarter ?? "—"}</b><small>{dataMeta?.filingDate ?? "—"} 提交</small></div>{dataMeta?.sourceUrl && <a href={dataMeta.sourceUrl} target="_blank" rel="noreferrer">查看原文 ↗</a>}</div>
           </aside>
         </div>
       )}
