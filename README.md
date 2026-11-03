@@ -11,6 +11,32 @@
 - 深色 / 浅色模式，可记忆用户偏好
 - 响应式仪表盘，适配桌面和移动端
 
+## 自动更新
+
+- 覆盖页面现有全部 14 家机构，分别跟踪各自最新已披露季度，不假定所有机构同时披露。
+- 线上后台每小时检查 SEC submissions；页面每 5 分钟读取最新快照，恢复可见或联网时也会检查。“立即刷新”会跳过一小时检查间隔。
+- 默认选择“最新披露（自动）”，新增季度自动跟随；手动选择历史季度后保持该季度。
+- D1 保存成功快照及按 accession 缓存的信息表。上游请求有超时、有限重试和节流；失败不覆盖成功快照，页面会显示上次检查时间和失败状态。
+- 纳入 `13F-HR/A`：`RESTATEMENT` 替换原表，`NEW HOLDINGS` 补充持仓。校验信息表内容及封面条目数，异常数据不会写为成功快照。
+- 缺少可比上季度时，季度变动显示未知。普通持仓和期权分开合并；未识别的 ticker 显示真实 CUSIP。
+
+后台检查由该 Site 关联的云端定时任务执行，网站关闭时也会更新，不需要重新发布。接口如下：
+
+- `GET /api/sec13f?cik=0001067983`：读取最新快照，过期时检查 SEC；可加 `quarter=2026%20Q2` 固定历史季度，或 `refresh=1` 立即检查。
+- `GET /api/sec13f/refresh`：读取全部受支持机构的检查结果，包括季度、accession、检查时间和最近失败。
+- `POST /api/sec13f/refresh?cik=0001067983`：强制检查并保存这一家机构，成功后应通过 GET 读回确认。仅允许配置中的 14 家机构。
+
+这些接口沿用当前仅所有者可访问的 Sites 权限。无人值守任务每次用 Sites `get_site` 获取当前地址和平台服务访问方式，不把凭据写入代码、定时任务或仓库。后台逐家调用 POST，再读取汇总确认；失败保留旧数据并在下一次运行重试。若未来改变网站访问范围，应先为写入接口补充相应授权。
+
+本地预览需在首次构建后应用新增数据库迁移：
+
+```bash
+npm run build
+npx wrangler d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_military_mentallo.sql
+```
+
+托管部署由 Sites 自动应用迁移。`npm test` 包含实际构建、页面渲染及 API 回归测试；`npm run test:sec` 可单独执行更新逻辑回归测试。
+
 ## 本地运行
 
 ```bash
@@ -32,4 +58,4 @@ npm run build
 
 ## 在线预览
 
-https://smart-money-13f-tracker.garfield-wu.chatgpt.site
+[打开 13F Tracker](https://smart-money-13f-tracker.garfield-wu.chatgpt.site)

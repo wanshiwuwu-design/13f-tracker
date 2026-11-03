@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type Holding = {
+  id?: string;
   rank: number;
   ticker: string;
   company: string;
@@ -10,8 +11,8 @@ type Holding = {
   value: number;
   weight: number;
   shares: string;
-  change: number;
-  action: "增持" | "减持" | "新建" | "清仓" | "持有";
+  change: number | null;
+  action: "增持" | "减持" | "新建" | "清仓" | "持有" | "未知";
   color: string;
 };
 
@@ -65,8 +66,24 @@ type DataMeta = {
   filingDate: string;
   reportDate: string;
   sourceUrl: string;
-  removed: number;
+  removed: number | null;
+  checkedAt: string;
+  stale: boolean;
+  warning?: string;
+  comparisonAvailable: boolean;
+  accession: string;
 };
+
+const REFRESH_INTERVAL = 5 * 60 * 1000;
+
+function formatCheckedAt(value: string) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("zh-CN", { hour12: false });
+}
+
+function changeClass(change: number | null) {
+  return change === null || change === 0 ? "flat" : change > 0 ? "up" : "down";
+}
 
 export default function Home() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
@@ -79,6 +96,8 @@ export default function Home() {
   const [dataMeta, setDataMeta] = useState<DataMeta | null>(null);
   const [loading, setLoading] = useState(true);
   const [dataError, setDataError] = useState("");
+  const refreshRef = useRef<() => void>(() => {});
+  const scopeRef = useRef(0);
 
   useEffect(() => {
     const saved = window.localStorage.getItem("13f-theme");
@@ -96,31 +115,81 @@ export default function Home() {
   };
 
   useEffect(() => {
-    const controller = new AbortController();
+    const scope = ++scopeRef.current;
+    let cancelled = false;
+    let inFlight = false;
+    let failures = 0;
+    let controller: AbortController | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
     setLoading(true);
     setDataError("");
     setSelected(null);
     setActiveHoldings([]);
     setDataMeta(null);
-    const quarterQuery = quarter ? `&quarter=${encodeURIComponent(quarter)}` : "";
-    fetch(`/api/sec13f?cik=${activeManager.cik}${quarterQuery}`, { signal: controller.signal })
-      .then(async (response) => {
+    setAvailableQuarters([]);
+
+    const scheduleRetry = () => {
+      if (cancelled || scope !== scopeRef.current) return;
+      if (retryTimer) clearTimeout(retryTimer);
+      const delay = Math.min(REFRESH_INTERVAL, 30_000 * 2 ** Math.min(failures - 1, 4));
+      retryTimer = setTimeout(() => { void refresh(); }, delay);
+    };
+
+    const refresh = async (force = false) => {
+      if (cancelled || scope !== scopeRef.current || inFlight) return;
+      inFlight = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      controller = new AbortController();
+      setLoading(true);
+      const quarterQuery = quarter ? `&quarter=${encodeURIComponent(quarter)}` : "";
+      try {
+        const response = await fetch(`/api/sec13f?cik=${activeManager.cik}${quarterQuery}${force ? "&refresh=1" : ""}`, {
+          signal: controller.signal,
+          cache: "no-store",
+        });
         const data = await response.json() as { holdings?: Holding[]; meta?: DataMeta; availableQuarters?: string[]; error?: string };
-        if (!response.ok || !data.holdings || !data.meta) throw new Error(data.error ?? "SEC 数据暂时不可用");
-        setActiveHoldings(data.holdings);
+        if (cancelled || scope !== scopeRef.current) return;
+        if (!response.ok || !Array.isArray(data.holdings) || !data.meta) {
+          throw new Error(data.error ?? "SEC 数据暂时不可用");
+        }
+        const holdings = data.holdings;
+        setActiveHoldings(holdings);
         setDataMeta(data.meta);
         setAvailableQuarters(data.availableQuarters ?? [data.meta.quarter]);
-      })
-      .catch((error) => {
-        if (error instanceof Error && error.name === "AbortError") return;
+        setSelected((previous) => previous
+          ? holdings.find((item) => (item.id ?? item.ticker) === (previous.id ?? previous.ticker)) ?? null
+          : null);
+        setDataError("");
+        failures = data.meta.stale ? failures + 1 : 0;
+        if (data.meta.stale) scheduleRetry();
+      } catch (error) {
+        if (cancelled || scope !== scopeRef.current) return;
         setDataError(error instanceof Error ? error.message : "SEC 数据暂时不可用");
-        setActiveHoldings([]);
-        setDataMeta(null);
-        setAvailableQuarters([]);
-      })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    return () => controller.abort();
-  }, [activeManager, quarter]);
+        failures += 1;
+        scheduleRetry();
+      } finally {
+        inFlight = false;
+        if (!cancelled && scope === scopeRef.current) setLoading(false);
+      }
+    };
+
+    refreshRef.current = () => { void refresh(true); };
+    const onVisible = () => { if (!document.hidden) void refresh(); };
+    const onOnline = () => { void refresh(); };
+    const interval = setInterval(onVisible, REFRESH_INTERVAL);
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("online", onOnline);
+    void refresh();
+    return () => {
+      cancelled = true;
+      controller?.abort();
+      if (retryTimer) clearTimeout(retryTimer);
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("online", onOnline);
+      refreshRef.current = () => {};
+    };
+  }, [activeManager.cik, quarter]);
 
   const visibleHoldings = useMemo(() => {
     if (filter === "全部") return activeHoldings;
@@ -145,13 +214,37 @@ export default function Home() {
   }, [sectorData]);
 
   const topTen = activeHoldings.slice(0, 10).reduce((sum, item) => sum + item.weight, 0);
-  const turnover = activeHoldings.reduce((sum, item) => sum + item.weight * Math.min(100, Math.abs(item.change)) / 100, 0) / 2;
+  const comparisonAvailable = dataMeta?.comparisonAvailable === true;
+  const turnover = comparisonAvailable && activeHoldings.every((item) => item.change !== null)
+    ? activeHoldings.reduce((sum, item) => sum + item.weight * Math.min(100, Math.abs(item.change ?? 0)) / 100, 0) / 2
+    : null;
   const filingDate = dataMeta?.filingDate ? dataMeta.filingDate.replaceAll("-", ".") : "—";
 
+  const clearData = () => {
+    scopeRef.current += 1;
+    setSelected(null);
+    setActiveHoldings([]);
+    setDataMeta(null);
+    setAvailableQuarters([]);
+    setDataError("");
+    setLoading(true);
+  };
+
+  const chooseQuarter = (nextQuarter: string) => {
+    if (nextQuarter === quarter) return;
+    clearData();
+    setQuarter(nextQuarter);
+    setFilter("全部");
+  };
+
   const chooseManager = (manager: (typeof managers)[number]) => {
+    if (manager.cik === activeManager.cik && !quarter) {
+      refreshRef.current();
+      return;
+    }
+    clearData();
     setActiveManager(manager);
     setQuarter("");
-    setAvailableQuarters([]);
     setFilter("全部");
   };
 
@@ -205,25 +298,34 @@ export default function Home() {
           </div>
           <div className="period-control">
             <label htmlFor="quarter">报告期</label>
-            <select id="quarter" value={quarter || dataMeta?.quarter || ""} onChange={(event) => setQuarter(event.target.value)} disabled={!availableQuarters.length}>
-              {!availableQuarters.length && <option value="">读取最新披露…</option>}
-              {availableQuarters.map((item) => <option key={item}>{item}</option>)}
+            <select id="quarter" value={quarter} onChange={(event) => chooseQuarter(event.target.value)}>
+              <option value="">最新披露（自动）</option>
+              {quarter && !availableQuarters.includes(quarter) && <option value={quarter}>{quarter}</option>}
+              {availableQuarters.map((item) => <option key={item} value={item}>{item}</option>)}
             </select>
             <span className="filed-date">披露于 {filingDate}</span>
+            <button className="refresh-button" type="button" onClick={() => refreshRef.current()} disabled={loading}>{loading ? "检查中…" : "立即刷新"}</button>
           </div>
+        </div>
+
+        <div className={`sync-status${dataError || dataMeta?.stale || dataMeta?.warning ? " has-warning" : ""}`} role="status" aria-live="polite">
+          <div><span>{quarter ? "当前固定报告期" : "最新披露自动跟踪"} · 后台每小时同步 · 页面每 5 分钟检查</span>{dataMeta && <span>检查时间 {formatCheckedAt(dataMeta.checkedAt)}</span>}</div>
+          {dataMeta?.stale && <p>当前显示上次成功保存的数据，正在重试更新。</p>}
+          {dataMeta?.warning && <p>{dataMeta.warning}</p>}
+          {dataError && <p>{dataMeta ? "更新暂未成功，保留上次数据。" : "数据暂时不可用。"}{dataError}；将自动重试。</p>}
         </div>
 
         <div className="metric-grid">
           <article className="metric-card featured">
             <div className="metric-label">13F 持仓市值 <span>i</span></div>
             <strong>{dataMeta ? `$${dataMeta.totalValue.toFixed(1)}B` : "—"}</strong>
-            <div className="metric-foot"><span className={dataError ? "down" : "positive"}>{loading ? "正在同步" : dataError ? "同步失败" : "SEC 已同步"}</span><small>{dataMeta?.quarter ?? "最新披露"}</small></div>
+            <div className="metric-foot"><span className={dataError || dataMeta?.stale ? "down" : "positive"}>{loading ? "正在检查" : dataError || dataMeta?.stale ? "等待更新" : dataMeta ? "SEC 已检查" : "等待数据"}</span><small>{dataMeta?.quarter ?? "最新披露"}</small></div>
             <div className="sparkline" aria-hidden="true"><span /><span /><span /><span /><span /><span /><span /></div>
           </article>
           <article className="metric-card">
             <div className="metric-label">持仓数量</div>
             <strong>{dataMeta?.count ?? "—"}</strong>
-            <div className="metric-foot"><span className="neutral">{dataMeta ? `清仓 ${dataMeta.removed}` : "—"}</span><small>较上季度</small></div>
+            <div className="metric-foot"><span className="neutral">{comparisonAvailable && dataMeta?.removed != null ? `清仓 ${dataMeta.removed}` : "对比不可用"}</span><small>较上季度</small></div>
           </article>
           <article className="metric-card">
             <div className="metric-label">前十集中度</div>
@@ -233,8 +335,8 @@ export default function Home() {
           </article>
           <article className="metric-card">
             <div className="metric-label">本季换手率</div>
-            <strong>{activeHoldings.length ? `${turnover.toFixed(1)}%` : "—"}</strong>
-            <div className="metric-foot"><span className="positive">估算值</span><small>按申报股数变化</small></div>
+            <strong>{turnover !== null && activeHoldings.length ? `${turnover.toFixed(1)}%` : "—"}</strong>
+            <div className="metric-foot"><span className={turnover === null ? "neutral" : "positive"}>{turnover === null ? "对比不可用" : "估算值"}</span><small>{turnover === null ? "缺少可比上季数据" : "按申报股数变化"}</small></div>
           </article>
         </div>
 
@@ -243,7 +345,7 @@ export default function Home() {
             <div className="panel-head"><div><span className="section-kicker">CONCENTRATION</span><h3>核心持仓</h3></div><span className="panel-note">占组合权重</span></div>
             <div className="bar-list">
               {activeHoldings.slice(0, 6).map((item) => (
-                <button key={item.ticker} onClick={() => setSelected(item)} className="bar-row">
+                <button key={item.id ?? item.ticker} onClick={() => setSelected(item)} className="bar-row">
                   <span className="rank">{String(item.rank).padStart(2, "0")}</span>
                   <span className="stock-logo" style={{ background: item.color }}>{item.ticker.slice(0, 1)}</span>
                   <span className="bar-company"><b>{item.ticker}</b><small>{item.company}</small></span>
@@ -277,16 +379,16 @@ export default function Home() {
         <div className="table-card">
           <div className="holdings-table table-head"><span># / 股票</span><span>行业</span><span>持股数量</span><span>持仓市值</span><span>组合占比</span><span>季度变化</span></div>
           {visibleHoldings.map((item) => (
-            <button className="holdings-table table-row" key={item.ticker} onClick={() => setSelected(item)}>
+            <button className="holdings-table table-row" key={item.id ?? item.ticker} onClick={() => setSelected(item)}>
               <span className="stock-cell"><i>{item.rank}</i><span className="stock-logo" style={{ background: item.color }}>{item.ticker[0]}</span><span><b>{item.ticker}</b><small>{item.company}</small></span></span>
               <span>{item.sector}</span><span>{item.shares}</span><span><b>${item.value.toFixed(2)}B</b></span><span><b>{item.weight.toFixed(2)}%</b></span>
-              <span><i className={`action ${item.action}`}>{item.action}</i><b className={item.change > 0 ? "up" : item.change < 0 ? "down" : "flat"}>{item.change === 0 ? "—" : `${item.change > 0 ? "+" : ""}${item.change}%`}</b></span>
+              <span><i className={`action ${item.action}`}>{item.action}</i><b className={changeClass(item.change)}>{item.change === null || item.change === 0 ? "—" : `${item.change > 0 ? "+" : ""}${item.change}%`}</b></span>
             </button>
           ))}
           {loading && <div className="table-status"><span className="loader" />正在从 SEC EDGAR 同步申报数据…</div>}
           {!loading && visibleHoldings.length === 0 && <div className="table-status">{dataError || "该筛选条件下暂无持仓"}</div>}
         </div>
-        <p className="data-caption">数据直接读取 SEC Form 13F 信息表，并按 CUSIP 合并同一证券；季度变化按申报股数与上一季自动对比。13F 不包含现金、私募资产及多数海外直接持仓。</p>
+        <p className="data-caption">数据读取 SEC Form 13F 信息表，合并同类证券并区分期权与普通持仓；季度变化按申报股数与上一季对比。未识别的股票代码显示 CUSIP。13F 不包含现金、私募资产及多数海外直接持仓。</p>
       </section>
 
       <footer><div className="brand"><span className="brand-mark"><i /><i /><i /></span><span>13F <b>TRACKER</b></span></div><p>数据源自美国证券交易委员会公开披露，仅供研究，不构成投资建议。</p><a href="https://www.sec.gov/edgar/search/" target="_blank" rel="noreferrer">SEC EDGAR ↗</a></footer>
@@ -296,9 +398,9 @@ export default function Home() {
           <aside className="drawer" onClick={(event) => event.stopPropagation()} aria-label={`${selected.company} 持仓详情`}>
             <button className="drawer-close" onClick={() => setSelected(null)} aria-label="关闭详情">×</button>
             <div className="drawer-stock"><span className="stock-logo large" style={{ background: selected.color }}>{selected.ticker[0]}</span><div><span className="section-kicker">POSITION DETAIL</span><h2>{selected.ticker}</h2><p>{selected.company} · {selected.sector}</p></div></div>
-            <div className="drawer-metrics"><div><span>持仓市值</span><b>${selected.value.toFixed(2)}B</b></div><div><span>组合占比</span><b>{selected.weight.toFixed(2)}%</b></div><div><span>持股数量</span><b>{selected.shares}</b></div><div><span>本季动作</span><b className={selected.change >= 0 ? "up" : "down"}>{selected.action}</b></div></div>
+            <div className="drawer-metrics"><div><span>持仓市值</span><b>${selected.value.toFixed(2)}B</b></div><div><span>组合占比</span><b>{selected.weight.toFixed(2)}%</b></div><div><span>持股数量</span><b>{selected.shares}</b></div><div><span>本季动作</span><b className={changeClass(selected.change)}>{selected.action}</b></div></div>
             <div className="history-card"><div className="panel-head"><h3>已收录报告期</h3><span>SEC 自动读取</span></div><p>{availableQuarters.slice(0, 5).join(" · ")}</p></div>
-            <div className="filing-link"><span>最新申报</span><div><b>Form 13F-HR · {dataMeta?.quarter ?? "—"}</b><small>{dataMeta?.filingDate ?? "—"} 提交</small></div>{dataMeta?.sourceUrl && <a href={dataMeta.sourceUrl} target="_blank" rel="noreferrer">查看原文 ↗</a>}</div>
+            <div className="filing-link"><span>当前申报</span><div><b>Form 13F · {dataMeta?.quarter ?? "—"}</b><small>{dataMeta?.filingDate ?? "—"} 提交</small></div>{dataMeta?.sourceUrl && <a href={dataMeta.sourceUrl} target="_blank" rel="noreferrer">查看原文 ↗</a>}</div>
           </aside>
         </div>
       )}

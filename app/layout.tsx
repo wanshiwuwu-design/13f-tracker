@@ -27,9 +27,6 @@ export const metadata: Metadata = {
     description: "追踪顶级投资人的每一次下注。",
     images: ["/og.png"],
   },
-  other: {
-    "codex-preview": "development",
-  },
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
