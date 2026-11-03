@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import PortfolioPoster from "./components/PortfolioPoster";
 
 type Holding = {
   id?: string;
@@ -339,6 +340,8 @@ export default function Home() {
             <div className="metric-foot"><span className={turnover === null ? "neutral" : "positive"}>{turnover === null ? "对比不可用" : "估算值"}</span><small>{turnover === null ? "缺少可比上季数据" : "按申报股数变化"}</small></div>
           </article>
         </div>
+
+        <PortfolioPoster manager={activeManager} meta={dataMeta} holdings={activeHoldings} isLatest={!quarter} hasError={Boolean(dataError)} />
 
         <div className="insight-grid">
           <article className="panel top-holdings">
