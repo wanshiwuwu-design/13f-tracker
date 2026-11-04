@@ -115,23 +115,34 @@ export async function renderPortfolioPoster(
     ctx.strokeStyle = "#bb8a44"; ctx.lineWidth = 2; ctx.stroke();
   }
 
-  ctx.save();
-  ctx.beginPath(); ctx.arc(cx, cy, inner - 8, 0, Math.PI * 2); ctx.clip();
-  ctx.fillStyle = "#12110e"; ctx.fillRect(cx - inner, cy - inner, inner * 2, inner * 2);
-  if (photo) {
-    const size = inner * 2;
-    const scale = Math.max(size / photo.naturalWidth, size / photo.naturalHeight);
+  // Keep the portrait and numbers in separate regions. Contain the entire image
+  // instead of cropping a headshot into the full centre or fading over the face.
+  const centreFill = ctx.createRadialGradient(cx, cy - 140, 20, cx, cy, inner);
+  centreFill.addColorStop(0, "#241d12"); centreFill.addColorStop(1, "#0b0b09");
+  ctx.beginPath(); ctx.arc(cx, cy, inner - 8, 0, Math.PI * 2);
+  ctx.fillStyle = centreFill; ctx.fill();
+
+  const frame = { x: cx - 85, y: cy - 190, width: 170, height: 190 };
+  ctx.beginPath(); ctx.roundRect(frame.x, frame.y, frame.width, frame.height, 12);
+  ctx.fillStyle = "#11110f"; ctx.fill();
+  ctx.strokeStyle = "#b68a4877"; ctx.lineWidth = 1.5; ctx.stroke();
+  const usePhoto = photo && photo.naturalWidth / photo.naturalHeight <= 1.6;
+  if (usePhoto) {
+    const scale = Math.min((frame.width - 16) / photo.naturalWidth, (frame.height - 16) / photo.naturalHeight);
     const w = photo.naturalWidth * scale, h = photo.naturalHeight * scale;
-    ctx.drawImage(photo, cx - w / 2, cy - size / 2, w, h);
-  } else text(ctx, manager.name.slice(0, 2), cx, cy - 60, 70, GOLD, 600);
-  const shade = ctx.createLinearGradient(0, cy - 30, 0, cy + inner);
-  shade.addColorStop(0, "#08080700"); shade.addColorStop(.35, "#080807dd"); shade.addColorStop(1, "#080807");
-  ctx.fillStyle = shade; ctx.fillRect(cx - inner, cy - 30, inner * 2, inner + 30);
-  text(ctx, "13F 申报市值（美元）", cx, cy + 62, 21, GOLD);
-  text(ctx, formatBillionsAsYi(meta.totalValue), cx, cy + 108, 43, CREAM, 700, "center", 380);
-  text(ctx, `共 ${meta.count} 项持仓`, cx, cy + 151, 23, GOLD);
-  ctx.restore();
-  if (!model.segments.length) text(ctx, "本期无持仓金额", cx, cy - 180, 23, GOLD);
+    ctx.drawImage(photo, cx - w / 2, frame.y + (frame.height - h) / 2, w, h);
+  } else {
+    // Panoramic/poorly framed source photos get a clean institution mark.
+    const initials = manager.cik === "0001759760" ? "H&H" : manager.manager.match(/[A-Za-z]+/g)?.map((part) => part[0]).slice(0, 2).join("") || manager.name.slice(0, 2);
+    text(ctx, initials, cx, frame.y + 83, 52, GOLD, 600, "center", 146);
+    text(ctx, manager.name, cx, frame.y + 133, 17, "#bfa57c", 400, "center", 144);
+  }
+  text(ctx, manager.manager, cx, cy + 27, 17, "#bfa57c", 400, "center", 330);
+  line(ctx, cx - 125, cy + 49, 250);
+  text(ctx, "13F 申报市值（美元）", cx, cy + 77, 20, GOLD);
+  text(ctx, formatBillionsAsYi(meta.totalValue), cx, cy + 122, 43, CREAM, 700, "center", 380);
+  text(ctx, `共 ${meta.count} 项持仓`, cx, cy + 166, 22, GOLD);
+  if (!model.segments.length) text(ctx, "本期无持仓金额", cx, cy - inner - 20, 23, GOLD);
 
   text(ctx, `前十大持仓  /  合计 ${model.topTenWeight.toFixed(1)}%`, 64, 1044, 25, GOLD, 600, "left");
   text(ctx, "申报市值 · 占比", 1016, 1044, 19, "#b59a71", 400, "right");
