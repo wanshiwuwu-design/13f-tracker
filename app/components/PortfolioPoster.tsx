@@ -54,7 +54,7 @@ export default function PortfolioPoster({ manager, meta, holdings, isLatest, has
           {ready && rendered && <a className="poster-open" href={rendered.url} target="_blank" rel="noopener noreferrer">查看大图 ↗</a>}
           {error && <button className="poster-open" onClick={() => setRetry((value) => value + 1)}>重新生成</button>}
         </div>
-        <p className="poster-hint">2160 × 2880 像素 · 适合保存与分享<br />无需填写数字，新数据同步后会自动重绘。</p>
+        <p className="poster-hint">2160 × 2880 像素 · 适合保存与分享<br />{manager.artworkKind === "institution" ? "中心为 AI 机构插画" : "人物为 AI 卡通形象"}，持仓数字随 SEC 数据自动更新。</p>
         {stale && meta && <p className="poster-warning">海报使用上次成功数据，并已在图片中标注。</p>}
         {error && <p className="poster-warning" role="alert">{error}</p>}
       </div>

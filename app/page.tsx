@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import PortfolioPoster from "./components/PortfolioPoster";
+import { investorArtwork, institutionArtwork } from "@/lib/investor-artwork";
 
 type Holding = {
   id?: string;
@@ -58,7 +59,9 @@ const managers = [
       || existing.name.toLowerCase() === candidate.name.toLowerCase(),
     ),
   ),
-];
+].map((item) => ({ ...item, image: investorArtwork[item.cik] ?? item.image,
+  artworkKind: institutionArtwork.has(item.cik) ? "institution" as const : "person" as const,
+}));
 
 type DataMeta = {
   quarter: string;
@@ -290,7 +293,7 @@ export default function Home() {
       <section className="dashboard" id="dashboard">
         <div className="section-heading">
           <div className="manager-title">
-            <img className="avatar active-manager-avatar" src={activeManager.image} alt={`${activeManager.manager} 头像`} />
+            <img className="avatar active-manager-avatar" src={activeManager.image} alt={`${activeManager.name} 插画形象`} />
             <div>
               <div className="section-kicker">CURRENT PORTFOLIO</div>
               <h2>{activeManager.name}</h2>

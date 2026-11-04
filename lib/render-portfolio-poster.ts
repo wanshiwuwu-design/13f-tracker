@@ -1,6 +1,6 @@
 import { buildPosterModel, formatBillionsAsYi, type PosterHolding } from "./portfolio-poster";
 
-export type PosterManager = { name: string; manager: string; cik: string; image: string };
+export type PosterManager = { name: string; manager: string; cik: string; image: string; artworkKind?: "person" | "institution" };
 export type PosterMeta = {
   quarter: string; totalValue: number; count: number; reportDate: string;
   filingDate: string; accession: string; checkedAt: string; stale: boolean;
@@ -58,6 +58,7 @@ export async function renderPortfolioPoster(
   const model = buildPosterModel(holdings, meta.totalValue);
   if (meta.count !== model.count) throw new Error("持仓条目尚未完整同步，请刷新后重试");
   const [photo] = await Promise.all([portrait(manager.image), document.fonts.ready]);
+  const illustrated = manager.image.includes("/cartoon/");
   canvas.width = POSTER_WIDTH * 2;
   canvas.height = POSTER_HEIGHT * 2;
   const ctx = canvas.getContext("2d");
@@ -86,6 +87,7 @@ export async function renderPortfolioPoster(
   ctx.fillText(headline, 540, 102);
   text(ctx, `${meta.quarter.replace(" Q", " 年 Q")} 13F  ·  截至 ${meta.reportDate.replaceAll("-", "/")}`, 540, 163, 27, GOLD);
   text(ctx, `${manager.manager}  /  ${manager.name}`, 540, 205, 19, "#b59a71", 400, "center", 930);
+  if (illustrated) text(ctx, !photo ? "机构标识" : manager.artworkKind === "institution" ? "AI 机构插画" : "AI 卡通形象", 540, 237, 15, "#9e875e");
 
   const cx = 540, cy = 625, outer = 374, inner = 222;
   for (let index = 0; index < model.segments.length; index++) {
@@ -115,33 +117,30 @@ export async function renderPortfolioPoster(
     ctx.strokeStyle = "#bb8a44"; ctx.lineWidth = 2; ctx.stroke();
   }
 
-  // Keep the portrait and numbers in separate regions. Contain the entire image
-  // instead of cropping a headshot into the full centre or fading over the face.
+  // Keep the character and numbers separate, without a rectangular photo frame.
   const centreFill = ctx.createRadialGradient(cx, cy - 140, 20, cx, cy, inner);
   centreFill.addColorStop(0, "#241d12"); centreFill.addColorStop(1, "#0b0b09");
   ctx.beginPath(); ctx.arc(cx, cy, inner - 8, 0, Math.PI * 2);
   ctx.fillStyle = centreFill; ctx.fill();
 
-  const frame = { x: cx - 85, y: cy - 190, width: 170, height: 190 };
-  ctx.beginPath(); ctx.roundRect(frame.x, frame.y, frame.width, frame.height, 12);
-  ctx.fillStyle = "#11110f"; ctx.fill();
-  ctx.strokeStyle = "#b68a4877"; ctx.lineWidth = 1.5; ctx.stroke();
-  const usePhoto = photo && photo.naturalWidth / photo.naturalHeight <= 1.6;
-  if (usePhoto) {
-    const scale = Math.min((frame.width - 16) / photo.naturalWidth, (frame.height - 16) / photo.naturalHeight);
+  if (illustrated && photo) {
+    // A transparent bust floats inside the ring; numbers stay below the character.
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx, cy, inner - 9, 0, Math.PI * 2); ctx.clip();
+    const scale = Math.min(308 / photo.naturalWidth, 274 / photo.naturalHeight);
     const w = photo.naturalWidth * scale, h = photo.naturalHeight * scale;
-    ctx.drawImage(photo, cx - w / 2, frame.y + (frame.height - h) / 2, w, h);
+    ctx.drawImage(photo, cx - w / 2, cy - 204 + (274 - h) / 2, w, h);
+    ctx.restore();
   } else {
-    // Panoramic/poorly framed source photos get a clean institution mark.
+    // Failed/unavailable artwork uses a clean institution mark instead of a broken photo.
     const initials = manager.cik === "0001759760" ? "H&H" : manager.manager.match(/[A-Za-z]+/g)?.map((part) => part[0]).slice(0, 2).join("") || manager.name.slice(0, 2);
-    text(ctx, initials, cx, frame.y + 83, 52, GOLD, 600, "center", 146);
-    text(ctx, manager.name, cx, frame.y + 133, 17, "#bfa57c", 400, "center", 144);
+    text(ctx, initials, cx, cy - 72, 66, GOLD, 600, "center", 240);
+    text(ctx, manager.name, cx, cy - 7, 19, "#bfa57c", 400, "center", 300);
   }
-  text(ctx, manager.manager, cx, cy + 27, 17, "#bfa57c", 400, "center", 330);
-  line(ctx, cx - 125, cy + 49, 250);
-  text(ctx, "13F 申报市值（美元）", cx, cy + 77, 20, GOLD);
-  text(ctx, formatBillionsAsYi(meta.totalValue), cx, cy + 122, 43, CREAM, 700, "center", 380);
-  text(ctx, `共 ${meta.count} 项持仓`, cx, cy + 166, 22, GOLD);
+  line(ctx, cx - 114, cy + 84, 228);
+  text(ctx, "13F 申报市值（美元）", cx, cy + 105, 18, GOLD);
+  text(ctx, formatBillionsAsYi(meta.totalValue), cx, cy + 145, 42, CREAM, 700, "center", 380);
+  text(ctx, `共 ${meta.count} 项持仓`, cx, cy + 182, 20, GOLD);
   if (!model.segments.length) text(ctx, "本期无持仓金额", cx, cy - inner - 20, 23, GOLD);
 
   text(ctx, `前十大持仓  /  合计 ${model.topTenWeight.toFixed(1)}%`, 64, 1044, 25, GOLD, 600, "left");
