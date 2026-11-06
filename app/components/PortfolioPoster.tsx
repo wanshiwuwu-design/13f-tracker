@@ -47,7 +47,7 @@ export default function PortfolioPoster({ manager, meta, holdings, isLatest, has
       <div className="poster-copy">
         <span className="section-kicker">PORTFOLIO POSTER</span>
         <h3 id="poster-heading">把持仓，看成一张图</h3>
-        <p>黑金持仓海报随当前机构和报告期自动生成。环形面积对应真实仓位，前十大持仓与申报市值一目了然。</p>
+        <p>淡雅持仓海报随当前机构和报告期自动生成。环形面积对应真实仓位，前十大持仓与申报市值一目了然。</p>
         <div className="poster-current"><span>当前海报</span><strong>{manager.name}</strong><small>{meta ? `${meta.quarter} · ${meta.count} 项持仓` : "等待持仓数据"}</small></div>
         <div className="poster-actions">
           {ready && rendered ? <a className="poster-download" href={rendered.url} download={posterFileName(manager.name, meta!.quarter)}>下载高清 PNG ↓</a> : <button className="poster-download" disabled>{error ? "生成未完成" : meta ? "正在生成海报…" : "等待数据后自动生成"}</button>}
