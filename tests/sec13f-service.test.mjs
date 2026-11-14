@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { D1Cache, getSec13f, refreshSec13f } from "../lib/sec13f.ts";
+import { D1Cache, getSec13f, MANAGER_CIKS, refreshSec13f } from "../lib/sec13f.ts";
 
 const CIK = "0001067983";
 const latestKey = `snapshot-v2:${CIK}:latest`;
@@ -64,6 +64,13 @@ const read = async (cache, query = "") => {
   return { response, body: await response.json() };
 };
 const refresh = (cache) => refreshSec13f(request("", "POST"), cache);
+
+test("tracks Soros Fund Management and Renaissance Technologies", () => {
+  assert.equal(MANAGER_CIKS.length, 16);
+  assert.equal(new Set(MANAGER_CIKS).size, MANAGER_CIKS.length);
+  assert(MANAGER_CIKS.includes("0001029160"));
+  assert(MANAGER_CIKS.includes("0001037389"));
+});
 
 test("latest follows a newly disclosed quarter while a pinned quarter remains fixed", async t => {
   const q1 = filing(1, "2026-03-31", { positions: [{ cusip: "037833100", company: "APPLE", value: 1e9, shares: 10 }] });

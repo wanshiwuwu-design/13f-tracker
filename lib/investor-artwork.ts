@@ -14,6 +14,8 @@ export const investorArtwork: Record<string, string> = {
   "0001103804": "/investors/cartoon/andreas-halvorsen.webp",
   "0001167483": "/investors/cartoon/chase-coleman.webp",
   "0001647251": "/investors/cartoon/chris-hohn.webp",
+  "0001029160": "/investors/cartoon/george-soros.webp",
+  "0001037389": "/investors/cartoon/jim-simons.webp",
 };
 
 export const institutionArtwork = new Set(["0001709323"]);

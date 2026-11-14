@@ -1,9 +1,20 @@
 import assert from "node:assert/strict";
+import { access } from "node:fs/promises";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
+import { investorArtwork } from "../lib/investor-artwork.ts";
 import { buildPosterModel, formatBillionsAsYi, posterFileName } from "../lib/portfolio-poster.ts";
 
 const position = (value, index, ticker = `STOCK${index}`) => ({ id: `position-${index}`, ticker, company: `Company ${index}`, value, weight: 99 });
 const closeTo = (actual, expected) => assert(Math.abs(actual - expected) < 1e-9, `${actual} should equal ${expected}`);
+
+test("provides local artwork for Soros and Renaissance", async () => {
+  for (const cik of ["0001029160", "0001037389"]) {
+    const artwork = investorArtwork[cik];
+    assert.match(artwork, /^\/investors\/cartoon\/.+\.webp$/);
+    await access(fileURLToPath(new URL(`../public${artwork}`, import.meta.url)));
+  }
+});
 
 test("uses disclosed dollar amounts for top ten and a proportional top-eight plus other ring", () => {
   const holdings = Array.from({ length: 12 }, (_, i) => position(i + 1, i));

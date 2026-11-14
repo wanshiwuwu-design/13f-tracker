@@ -48,6 +48,8 @@ const requestedManagers: Manager[] = [
   { name: "Viking Global", manager: "Andreas Halvorsen", cik: "0001103804", value: "SEC 实时", holdings: 0, image: "/investors/andreas-halvorsen.jpg" },
   { name: "Tiger Global", manager: "Chase Coleman", cik: "0001167483", value: "SEC 实时", holdings: 0, image: "/investors/chase-coleman.jpg" },
   { name: "TCI Fund Management", manager: "Chris Hohn", cik: "0001647251", value: "SEC 实时", holdings: 0, image: "/investors/chris-hohn.jpg" },
+  { name: "索罗斯基金管理", manager: "George Soros", cik: "0001029160", value: "SEC 实时", holdings: 0, image: "/investors/cartoon/george-soros.webp" },
+  { name: "文艺复兴科技", manager: "Jim Simons · Founder", cik: "0001037389", value: "SEC 实时", holdings: 0, image: "/investors/cartoon/jim-simons.webp" },
 ];
 
 const managers = [
@@ -79,6 +81,7 @@ type DataMeta = {
 };
 
 const REFRESH_INTERVAL = 5 * 60 * 1000;
+const HOLDINGS_PAGE_SIZE = 100;
 
 function formatCheckedAt(value: string) {
   const date = new Date(value);
@@ -95,6 +98,7 @@ export default function Home() {
   const [quarter, setQuarter] = useState("");
   const [availableQuarters, setAvailableQuarters] = useState<string[]>([]);
   const [filter, setFilter] = useState("全部");
+  const [visibleLimit, setVisibleLimit] = useState(HOLDINGS_PAGE_SIZE);
   const [selected, setSelected] = useState<Holding | null>(null);
   const [activeHoldings, setActiveHoldings] = useState<Holding[]>([]);
   const [dataMeta, setDataMeta] = useState<DataMeta | null>(null);
@@ -199,6 +203,7 @@ export default function Home() {
     if (filter === "全部") return activeHoldings;
     return activeHoldings.filter((item) => item.action === filter);
   }, [filter, activeHoldings]);
+  const displayedHoldings = visibleHoldings.slice(0, visibleLimit);
 
   const sectorData = useMemo(() => {
     const palette: Record<string, string> = { 金融: "#34d399", 信息技术: "#60a5fa", 日常消费: "#fbbf24", 能源: "#fb7185", 通信服务: "#a78bfa", 医疗保健: "#22d3ee", 可选消费: "#f97316", 工业: "#94a3b8", 其他: "#64748b" };
@@ -232,6 +237,7 @@ export default function Home() {
     setAvailableQuarters([]);
     setDataError("");
     setLoading(true);
+    setVisibleLimit(HOLDINGS_PAGE_SIZE);
   };
 
   const chooseQuarter = (nextQuarter: string) => {
@@ -379,18 +385,23 @@ export default function Home() {
         <div className="section-heading compact">
           <div><span className="section-kicker">QUARTERLY MOVES</span><h2>本季度调仓明细</h2><p>点击任一持仓，查看仓位、持股数量与变化趋势。</p></div>
           <div className="filter-tabs" role="tablist">
-            {["全部", "增持", "减持", "新建", "清仓"].map((item) => <button role="tab" aria-selected={filter === item} key={item} className={filter === item ? "active" : ""} onClick={() => setFilter(item)}>{item}</button>)}
+            {["全部", "增持", "减持", "新建", "清仓"].map((item) => <button role="tab" aria-selected={filter === item} key={item} className={filter === item ? "active" : ""} onClick={() => { setFilter(item); setVisibleLimit(HOLDINGS_PAGE_SIZE); }}>{item}</button>)}
           </div>
         </div>
         <div className="table-card">
           <div className="holdings-table table-head"><span># / 股票</span><span>行业</span><span>持股数量</span><span>持仓市值</span><span>组合占比</span><span>季度变化</span></div>
-          {visibleHoldings.map((item) => (
+          {displayedHoldings.map((item) => (
             <button className="holdings-table table-row" key={item.id ?? item.ticker} onClick={() => setSelected(item)}>
               <span className="stock-cell"><i>{item.rank}</i><span className="stock-logo" style={{ background: item.color }}>{item.ticker[0]}</span><span><b>{item.ticker}</b><small>{item.company}</small></span></span>
               <span>{item.sector}</span><span>{item.shares}</span><span><b>${item.value.toFixed(2)}B</b></span><span><b>{item.weight.toFixed(2)}%</b></span>
               <span><i className={`action ${item.action}`}>{item.action}</i><b className={changeClass(item.change)}>{item.change === null || item.change === 0 ? "—" : `${item.change > 0 ? "+" : ""}${item.change}%`}</b></span>
             </button>
           ))}
+          {!loading && displayedHoldings.length < visibleHoldings.length && (
+            <button className="table-load-more" type="button" onClick={() => setVisibleLimit((current) => current + HOLDINGS_PAGE_SIZE)}>
+              再显示 {Math.min(HOLDINGS_PAGE_SIZE, visibleHoldings.length - displayedHoldings.length)} 条 · 还剩 {visibleHoldings.length - displayedHoldings.length} 条
+            </button>
+          )}
           {loading && <div className="table-status"><span className="loader" />正在从 SEC EDGAR 同步申报数据…</div>}
           {!loading && visibleHoldings.length === 0 && <div className="table-status">{dataError || "该筛选条件下暂无持仓"}</div>}
         </div>
